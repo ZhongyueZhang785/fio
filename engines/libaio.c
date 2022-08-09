@@ -275,11 +275,16 @@ static int fio_libaio_getevents(struct thread_data *td, unsigned int min,
 	struct libaio_data *ld = td->io_ops_data;
 	struct libaio_options *o = td->eo;
 	unsigned actual_min = td->o.iodepth_batch_complete_min == 0 ? 0 : min;
-	struct timespec __lt, *lt = NULL;
+	struct timespec __lt, *lt;
 	int r, events = 0;
 
 	if (t) {
 		__lt = *t;
+		lt = &__lt;
+	}
+	else{
+		__lt.tv_sec = 0;
+		__lt.tv_nsec = 0;
 		lt = &__lt;
 	}
 
@@ -291,9 +296,14 @@ static int fio_libaio_getevents(struct thread_data *td, unsigned int min,
 			r = user_io_getevents(ld->aio_ctx, max,
 				ld->aio_events + events);
 		} else {
+restart:
 			r = io_getevents(ld->aio_ctx, actual_min,
 				max, ld->aio_events + events, lt);
 		}
+
+		if (r == 0)
+			goto restart;
+
 		if (r > 0)
 			events += r;
 		else if ((min && r == 0) || r == -EAGAIN) {
